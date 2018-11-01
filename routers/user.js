@@ -6,7 +6,30 @@ var secretKey = 'demo';
 const saltRounds = 10;
 const router = new Router();
 
-
+const tokenValidator = async(req, res, next) => {
+    let token = req.headers.authorization || '';
+    if(token && token.trim()){
+        try{
+            var decode = await jsonwebtoken.verify(token, secretKey);
+            if(decode){
+                req.user = decode;
+                next();
+            }else{
+                throw error('unauthorized');
+            }
+        }catch(error){
+            res.status(200).json({
+                status : 'error',
+                message : 'unauthorized'
+            })
+        }
+    }else{
+        res.status(200).json({
+            status : 'error',
+            message : 'unauthorized'
+        })
+    }
+};
 
 router.post('/register',async (req, res) => {
     const { fullname , email, password } = req.body;
@@ -105,30 +128,7 @@ router.post('/log', async (req, res) => {
     }
 })
 
-router.put('/profile', async(req, res, next) => {
-    let token = req.headers.authorization || '';
-    if(token && token.trim()){
-        try{
-            var decode = await jsonwebtoken.verify(token, secretKey);
-            if(decode){
-                req.user = decode;
-                next();
-            }else{
-                throw error('unauthorized');
-            }
-        }catch(error){
-            res.status(200).json({
-                status : 'error',
-                message : 'unauthorized'
-            })
-        }
-    }else{
-        res.status(200).json({
-            status : 'error',
-            message : 'unauthorized'
-        })
-    }
-}, async(req, res) => {
+router.put('/profile', tokenValidator, async(req, res) => {
     const { fullname } = req.body;
     if(fullname && fullname.trim()){
         try{
@@ -159,5 +159,30 @@ router.put('/profile', async(req, res, next) => {
         })
     }
 })
-
+router.get('/profile',tokenValidator, async (req, res) => {
+    try{
+        var {rows} = await db.query('SELECT * FROM "users" WHERE "email"=$1', [req.user.email]);
+        if(rows.length){
+            const user = rows[0];
+            res.status(200).json({
+                status : 'success',
+                message : 'successfull get profile',
+                profile : {
+                    fullname : user.fullname,
+                    email : user.email
+                }
+            });
+        }else{
+            res.status(200).json({
+                status : 'error',
+                message : 'user not exist'
+            })
+        }        
+    }catch(error){
+        res.status(200).json({
+            status : 'error',
+            message : 'internal error'
+        })
+    }
+})
 module.exports = router;
